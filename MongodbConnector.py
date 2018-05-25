@@ -124,7 +124,7 @@ class mongodbConnector():
         except:
             raise
             logging.error("Mongo Collection count Exception.")
-        print coln_docs_count
+        print(coln_docs_count)
 
     def get_collection_names(self):
         return self.mongo_inst.collection_names()

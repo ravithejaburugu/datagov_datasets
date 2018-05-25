@@ -6,19 +6,15 @@ Created on Mon Feb 26 15:50:27 2018
 """
 
 import requests
-import json
-import urllib2
+import urllib
 import os.path
 import pandas as pd
 from time import sleep
-from config import mongo_config  # argument_config
 from MongodbConnector import mongodbConnector
+from pget.down import Downloader
 
-
-root_folder = os.path.abspath(
-                os.path.join(
-                os.path.dirname('__file__'), '',
-                'datagov_source_datasets'))
+root_folder = os.path.abspath(os.path.join(os.path.dirname('__file__'),
+                                'datagov_source_datasets', 'health'))
 
 try:
     mongo = mongodbConnector()
@@ -27,68 +23,138 @@ except:
 
 
 def fetchGovData(domain, dataset_count, datasets_colln):
-    url = "http://catalog.data.gov/api/3/action/package_list?" + \
-          "q=" + domain + "&rows=" + str(dataset_count)
-    r = requests.get(url)
+    url = "http://catalog.data.gov/api/3/action/package_list?q={0}&rows=1000&start="
 
-    json_resp = r.json()
-    results = json_resp["result"]["results"]
+    start_val = 0
 
-    datasets_count = datasets_colln.count()
+    while True:
+        req_url = url.format(domain) + str(start_val)
+        print(req_url)
 
-    if datasets_count > 0:
-        mongo.bulk_mongo_update(datasets_colln, results)
-    else:
-        mongo.bulk_mongo_insert(datasets_colln, results)
+        r = requests.get(req_url)
+        json_resp = r.json()
+        results = json_resp["result"]["results"]
+
+        if len(results) > 0:
+            mongo.bulk_mongo_insert(datasets_colln, results)
+        else:
+            print("NO MORE DATASETS TO DOWNLOAD.")
+            break
+
+        start_val += 1000
+
+    print("Available datasets in this domain are :: " +
+          str(json_resp["result"]["count"]))
 
 
 def extractFromJSON(domain, datasets_colln):
     datasets_cursor = datasets_colln.find()
 
+    print(datasets_cursor)
+    #files_download = 10
     for dataset in datasets_cursor:
+        """if files_download == 0:
+            break
+        files_download = files_download - 1"""
         
+        dataset_name = dataset["name"]
+        print(">>>> " + dataset_name)
+        
+        available_formats = {}
+        res_format = None
+        res_urls = {}
+        other_formats = {}
+        for i, res in enumerate(dataset["resources"]):
+            available_formats[i] = {
+                    "format": res["format"],
+                    "url" : res["url"],
+                    "filename" : res["id"]
+                    }
+
+        #print(available_formats)
+        for a in available_formats.values():
+            if 'JSONL' in a["format"]:
+                res_format = 'JSONL'
+                break
+            elif 'jsonl' in a["format"]:
+                res_format = 'jsonl'
+                break
+            elif 'CSV' in a["format"]:
+                res_format = 'CSV'
+                break
+            elif 'csv' in a["format"]:
+                res_format = 'csv'
+                break
+            elif 'JSON' in a["format"]:
+                res_format = 'JSON'
+                break
+            elif 'json' in a["format"]:
+                res_format = 'json'
+                break
+            """elif 'XLS' in a["format"]:
+                res_format = 'XLS'
+                break
+            elif 'xls' in a["format"]:
+                res_format = 'xls'
+                break
+            else:
+                other_formats[a["url"]] = a["filename"]
+                with open("fileformats.txt", "a+") as fileformats:
+                    fileformats.write(a["filename"] + ',' + a["format"] + ',' \
+                                      + a["url"] + '\n')"""
+
+        if res_format is None:
+            continue
+            #res_urls = other_formats
+        else:
+            #continue
+            for a in available_formats.values():
+                if res_format in a["format"]:
+                    res_urls[a["url"]] = a["filename"]
+
         os.chdir(root_folder)
-        if not os.path.isdir(domain):
-            os.mkdir(domain)
-        os.chdir(domain)
-        
-        dataset_name = dataset["name"][:60]
 
         if not os.path.isdir(dataset_name):
             os.mkdir(dataset_name)
         os.chdir(dataset_name)
 
-        for res in dataset["resources"]:
-            res_format = res["format"]
-            res_url = res["url"]
+        print(str(res_format) + " :: " + str(res_urls))
 
-            file_name = (dataset_name + "." + res_format).lower()
-            print file_name
+        for res_url in res_urls.keys():
+            if res_format is None:
+                file_name = res_urls[res_url]
+            else:
+                file_name = res_urls[res_url] + "." + (res_format).lower()
 
+            print("Downloading... " + file_name)
+            #print("... from >> " + res_url)
             try:
                 if not os.path.isfile(file_name):
-                    print "Downloading..."
-                    sleep(3)
-                    resp = urllib2.urlopen(res_url)
+                    sleep(1)
+                    downloader = Downloader(res_url, file_name, 8)
+                    downloader.start()
+                    downloader.wait_for_finish()
+                    
+                    """resp = urllib.request.urlopen(res_url)
                     resp_content = resp.read()
-
-                    print "Writing..."
+                    print("Writing...")
                     with open(file_name, 'wb') as res_file:
-                        res_file.write(resp_content)
+                        res_file.write(resp_content)"""
             except:
-                # raise
-                print "Errorrrrrr..."
+                print("Error @ " + dataset_name)
                 continue
-
+            
 
 def main():
 
-    datasets_colln = mongo.initialize_mongo('datasets')
+    datasets_colln = mongo.initialize_mongo('health')
 
-    domains = ["health"]  # , "finance"]
+    #domains = ["health", "finance", "manufacturing", "consumer", "climate", 
+    # "local", "energy"]
+    domains = ["health"]
 
     for d in domains:
-        # fetchGovData(d, 1000, datasets_colln)
+        #fetchGovData(d, 1000, datasets_colln)
         extractFromJSON(d, datasets_colln)
 
 

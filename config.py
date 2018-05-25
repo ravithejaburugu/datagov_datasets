@@ -16,7 +16,7 @@ mongo_config = {
     'mongo_password': os.getenv('MONGO_PASSWORD', 'sl03pois!'),
     'mongo_auth_source': os.getenv('MONGO_AUTH_SOURCE', 'dbadmin'),
     'mongo_auth_mechanism': os.getenv('MONGO_AUTH_MECHANISM', 'MONGODB-CR'),
-    'db_name': os.getenv('MONGO_DB_NAME', 'datagov_finance2'),
+    'db_name': os.getenv('MONGO_DB_NAME', 'datagov_health'),
     'mongo_index_name': os.getenv('MONGO_INDEX_NAME', 'csrt'),
     'meta_colln_name': os.getenv('METADATA_COLLN_NAME', 'METADATA')
 }
